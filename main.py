@@ -1,54 +1,69 @@
 import streamlit as st
 import google.generativeai as genai
+import pypdf
 
-st.set_page_config(page_title="Analisador de Viagens", page_icon="✈️")
-st.title("✈️ Analisador de Cotações (Modo Precisão)")
+# Configuração da Página
+st.set_page_config(page_title="Analisador Preciso", page_icon="✈️")
+st.title("✈️ Analisador de Cotações (Versão Colab)")
 
+# 1. Configuração de Segurança (Secrets)
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('gemini-2.5-flash')
 else:
-    st.error("Chave não configurada nos Secrets!")
+    st.error("Chave API não configurada nos Secrets.")
     st.stop()
 
-arquivo = st.file_uploader("Suba o PDF original aqui", type="pdf")
+# Função que você usou no Colab para nunca errar o modelo
+def buscar_modelo_disponivel():
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            return m.name
+    return None
+
+arquivo = st.file_uploader("Suba seu PDF aqui", type="pdf")
 
 if arquivo:
-    with st.spinner('🕵️ Fazendo varredura visual completa no PDF...'):
+    with st.spinner('A IA está lendo conforme as configurações que deram certo...'):
         try:
-            pdf_data = arquivo.read()
+            # Lógica de leitura do seu código do Colab
+            reader = pypdf.PdfReader(arquivo)
+            texto = ""
+            for page in reader.pages:
+                texto += page.extract_text()
+
+            # Busca automática do melhor modelo (Gemini 1.5, 2.5, etc)
+            modelo_nome = buscar_modelo_disponivel()
             
-            # Comando ultra-rígido para evitar alucinações
-            prompt = """
-            INSTRUÇÃO CRÍTICA: Extraia os dados deste PDF com precisão cirúrgica. 
-            Não tente adivinhar. Se houver tabelas, siga a ordem das linhas.
-            
-            1. ✈️ CIA AÉREA: Nome da companhia principal.
-            2. 🛫 VOOS: Origem, Destino e Número do Voo para CADA trecho.
-            3. ⏱️ HORÁRIOS: Saída e Chegada exatas (como no PDF).
-            4. 🔄 ESCALAS: Tempo que o passageiro fica parado entre o pouso de um voo e a decolagem do próximo.
-            5. 🧳 REGRAS: Bagagens e taxas incluídas.
-            6. 💰 TOTAL: Valor final da cotação.
-            
-            Responda apenas com os dados encontrados, sem comentários adicionais.
-            """
-            
-            conteudo = [
-                {"mime_type": "application/pdf", "data": pdf_data},
-                prompt
-            ]
-            
-            resposta = model.generate_content(conteudo)
-            resultado = resposta.text
-            
-            st.markdown("---")
-            st.subheader("📋 Relatório Conferido")
-            st.info(resultado)
-            
-            # Opções de compartilhamento
-            st.download_button("📥 Baixar Relatório", resultado, file_name="resumo_viagem.txt")
-            zap_link = f"https://wa.me/?text={resultado[:900].replace(' ', '%20')}"
-            st.markdown(f'[📲 Enviar para WhatsApp]({zap_link})')
-            
+            if not modelo_nome:
+                st.error("Nenhum modelo disponível para esta chave.")
+            else:
+                model = genai.GenerativeModel(modelo_nome)
+                
+                # Usei o seu prompt exato
+                prompt = f"""
+                Resuma esta cotação de viagem em tópicos simples e claros.
+                Identifique detalhadamente:
+                - Nome da Cia Aérea
+                - Todos os voos e números
+                - Horários e tempos de escala (muito importante)
+                - Preços totais
+                
+                Texto: {texto}
+                """
+                
+                resposta = model.generate_content(prompt)
+                
+                st.markdown("---")
+                st.subheader("📋 Resumo da Cotação")
+                st.info(resposta.text)
+                
+                # Opções de compartilhamento
+                st.download_button("📥 Baixar Resumo", resposta.text, file_name="resumo.txt")
+                
+                zap_link = f"https://wa.me/?text={resposta.text[:900].replace(' ', '%20')}"
+                st.markdown(f'[📲 Enviar para WhatsApp]({zap_link})')
+                
+                st.balloons()
+                
         except Exception as e:
-            st.error(f"Erro na análise: {e}")
+            st.error(f"Erro ao processar: {e}")
