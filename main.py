@@ -14,22 +14,21 @@ else:
 arquivo = st.file_uploader("Arraste seu PDF aqui", type="pdf")
 
 if arquivo:
-    with st.spinner('Analisando...'):
+    with st.spinner('Analisando cotação...'):
         try:
             reader = pypdf.PdfReader(arquivo)
-            texto = ""
-            for page in reader.pages:
-                texto += page.extract_text()
+            texto = "".join([page.extract_text() for page in reader.pages])
             
-            # MUDANÇA AQUI: Usando o nome simplificado do modelo
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            resposta = model.generate_content(texto)
+            # Tentamos o 1.5 flash, se falhar, tentamos o 1.0 pro automaticamente
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                resposta = model.generate_content(f"Resuma: {texto}")
+            except:
+                model = genai.GenerativeModel('gemini-1.0-pro')
+                resposta = model.generate_content(f"Resuma esta cotação: {texto}")
             
             st.subheader("📋 Resumo")
             st.write(resposta.text)
             st.balloons()
-            
         except Exception as e:
-            # Se o erro 404 persistir, ele mostrará detalhes aqui
             st.error(f"Erro ao processar: {e}")
